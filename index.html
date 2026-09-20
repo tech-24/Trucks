@@ -145,8 +145,8 @@
   }
   td input[type="date"]:focus{ outline:none; box-shadow:inset 0 0 0 1.5px var(--accent); border-radius:3px; }
   select.status-select{
-    border:none; background:transparent; font-size:13px; padding:6px 6px; width:100%; cursor:pointer; color:inherit; font-family:inherit;
-    text-align:right;
+    border:none; background:transparent; font-size:13px; padding:6px 6px; cursor:pointer; color:inherit; font-family:inherit;
+    text-align:right; white-space:nowrap;
   }
   select.status-select:focus{ outline:none; }
   .status-visited select.status-select{ color:var(--visited-ink); font-weight:600; }
@@ -844,11 +844,10 @@
               <th style="width:11%">الحي</th>
               <th style="width:13%">الشارع / المجمع</th>
               <th style="width:12%">الموقع</th>
-              <th style="width:13%">الحالة</th>
+              <th>الحالة</th>
               <th style="width:12%">تاريخ الزيارة</th>
               <th style="width:9%">صورة الرخصة</th>
-              <th class="row-edit">تعديل</th>
-              <th class="row-del">حذف</th>
+              ${!isLocked ? `<th class="row-edit">تعديل</th><th class="row-del">حذف</th>` : ""}
             </tr></thead>
             <tbody>`;
 
@@ -885,8 +884,7 @@
               ? `<img class="photo-thumb" src="${getPhotoUrl(est.photoPath)}" alt="">`
               : (isLocked ? `<span class="cell-readonly">—</span>` : `<span class="photo-add">+ صورة</span>`)}
           </td>
-          <td class="row-edit">${!isLocked ? `<button data-editrow="${loc.id}|${est.id}" title="${editing ? "تم" : "تعديل"}" class="${editing ? "done" : ""}">${editing ? "✓" : "✎"}</button>` : ""}</td>
-          <td class="row-del">${!isLocked ? `<button data-delest="${loc.id}|${est.id}" title="حذف الصف">✕</button>` : ""}</td>
+          ${!isLocked ? `<td class="row-edit"><button data-editrow="${loc.id}|${est.id}" title="${editing ? "تم" : "تعديل"}" class="${editing ? "done" : ""}">${editing ? "✓" : "✎"}</button></td><td class="row-del"><button data-delest="${loc.id}|${est.id}" title="حذف الصف">✕</button></td>` : ""}
         </tr>`;
       });
 
@@ -1293,7 +1291,7 @@
   });
 
   // ---------- Lock / view-only mode ----------
-  function updateLockUI(){
+  function updateLockIndicators(){
     const lockBtn = document.getElementById("lockToggle");
     const importBtn = document.getElementById("btnImportData");
     const exportBtn = document.getElementById("btnExportData");
@@ -1304,6 +1302,9 @@
     }
     if(importBtn) importBtn.disabled = isLocked;
     if(exportBtn) exportBtn.disabled = isLocked;
+  }
+  function updateLockUI(){
+    updateLockIndicators();
     render();
   }
 
@@ -1333,7 +1334,7 @@
 
   async function init(){
     document.getElementById("main").innerHTML = `<div class="empty-state"><h2>جاري التحميل…</h2></div>`;
-    updateLockUI();
+    updateLockIndicators();
     state = await fetchAllData();
     render();
   }
