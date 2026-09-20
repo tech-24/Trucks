@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>المنشآت</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#FAFAF8;
+    --surface:#FFFFFF;
+    --ink:#1C1C1A;
+    --ink-soft:#6B6B65;
+    --line:#E4E2DC;
+    --accent:#3D6B5C;
+    --accent-ink:#FFFFFF;
+    --visited-bg:#E8F5E9;   --visited-ink:#2E7D32;
+    --closed-bg:#FFF3E0;    --closed-ink:#B85C00;
+    --notfound-bg:#FDECEA;  --notfound-ink:#C62828;
+    --licensemissing-bg:#F3E5F5;   --licensemissing-ink:#7B1FA2;
+    --periodincomplete-bg:#E3F2FD; --periodincomplete-ink:#1565C0;
+    --neutral-ink:#6B6B65;
+    --radius:6px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Segoe UI",Tahoma,-apple-system,BlinkMacSystemFont,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    font-size:15px;
+    line-height:1.5;
+  }
+  .num{ font-variant-numeric:tabular-nums; direction:ltr; unicode-bidi:plaintext; text-align:right; }
+
+  header{
+    position:sticky; top:0; z-index:20;
+    background:var(--bg);
+    border-bottom:1px solid var(--line);
+    padding:14px 18px 12px;
+    padding-left:56px;
+  }
+  .title-row{
+    display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:12px;
+    flex-wrap:wrap;
+  }
+  h1{ font-size:19px; font-weight:650; margin:0; letter-spacing:-0.01em; }
+  .stats{
+    display:flex; flex-wrap:wrap; gap:8px 18px; align-items:center;
+    font-size:13.5px; color:var(--ink-soft);
+  }
+  .stats b{ color:var(--ink); font-weight:650; }
+  .dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-left:5px; vertical-align:middle; }
+  .dot.visited{ background:var(--visited-ink); }
+  .dot.closed{ background:var(--closed-ink); }
+  .dot.notfound{ background:var(--notfound-ink); }
+  .dot.licensemissing{ background:var(--licensemissing-ink); }
+  .dot.periodincomplete{ background:var(--periodincomplete-ink); }
+  .dot.neutral{ background:#B7B5AD; }
+
+  .controls{
+    display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px;
+  }
+  .search-wrap{ position:relative; flex:1 1 220px; min-width:160px; }
+  .search-wrap input{
+    width:100%; padding:8px 30px 8px 10px; border:1px solid var(--line); border-radius:var(--radius);
+    background:var(--surface); font-size:14px; color:var(--ink); text-align:right;
+  }
+  .search-wrap svg{ position:absolute; right:9px; left:auto; top:50%; transform:translateY(-50%); width:14px; height:14px; opacity:.45; }
+  select.filter{
+    padding:8px 10px; border:1px solid var(--line); border-radius:var(--radius);
+    background:var(--surface); font-size:14px; color:var(--ink);
+  }
+  .btn{
+    padding:8px 12px; border:1px solid var(--line); border-radius:var(--radius);
+    background:var(--surface); color:var(--ink); font-size:13.5px; cursor:pointer;
+    white-space:nowrap;
+  }
+  .btn:hover{ border-color:#C9C7BF; }
+  .btn:disabled{ opacity:.45; cursor:not-allowed; }
+  .btn.primary{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+  .btn.primary:hover{ background:#345a4d; }
+  .btn-row{ display:flex; gap:8px; flex-wrap:wrap; }
+
+  main{ padding:14px 18px 60px; max-width:1100px; margin:0 auto; }
+
+  .location{
+    border:1px solid var(--line); border-radius:8px; background:var(--surface);
+    margin-bottom:12px; overflow:hidden;
+  }
+  .location-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:11px 14px; cursor:pointer; user-select:none;
+    gap:10px;
+  }
+  .location-head:hover{ background:#F6F5F1; }
+  .location-left{ display:flex; align-items:center; gap:9px; min-width:0; }
+  .chev{ width:10px; height:10px; flex:none; transition:transform .15s ease; opacity:.6; }
+  .location.collapsed .chev{ transform:rotate(90deg); }
+  .loc-name{ font-weight:600; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .loc-district{ font-weight:400; color:var(--ink-soft); font-size:13px; }
+  .loc-count{ color:var(--ink-soft); font-size:13px; flex:none; }
+  .loc-actions{ display:flex; gap:6px; flex:none; }
+  .icon-btn{
+    border:none; background:none; color:var(--ink-soft); cursor:pointer; padding:4px 6px; font-size:13px; border-radius:4px;
+  }
+  .icon-btn:hover{ background:#EDECE6; color:var(--ink); }
+
+  .location-body{ display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .location.collapsed .location-body{ display:none; }
+
+  table{ width:100%; min-width:600px; border-collapse:collapse; font-size:13.5px; }
+  thead th{
+    text-align:right; font-weight:600; color:var(--ink-soft); font-size:11.5px;
+    padding:7px 10px; border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+    background:#FBFAF7; white-space:nowrap;
+  }
+  tbody td{
+    padding:0; border-bottom:1px solid var(--line); vertical-align:middle;
+  }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr.status-visited{ background:var(--visited-bg); }
+  tbody tr.status-closed{ background:var(--closed-bg); }
+  tbody tr.status-notfound{ background:var(--notfound-bg); }
+  tbody tr.status-licensemissing{ background:var(--licensemissing-bg); }
+  tbody tr.status-periodincomplete{ background:var(--periodincomplete-bg); }
+  td .cell-pad{ padding:7px 10px; display:block; min-height:16px; outline:none; text-align:right; }
+  td .cell-pad:focus{ background:#fff; box-shadow:inset 0 0 0 1.5px var(--accent); border-radius:3px; }
+  td input[type="date"]{
+    border:none; background:transparent; font-size:13.5px; padding:7px 6px; width:100%; color:inherit; font-family:inherit;
+  }
+  td input[type="date"]:focus{ outline:none; box-shadow:inset 0 0 0 1.5px var(--accent); border-radius:3px; }
+  select.status-select{
+    border:none; background:transparent; font-size:13px; padding:6px 6px; width:100%; cursor:pointer; color:inherit; font-family:inherit;
+    text-align:right;
+  }
+  select.status-select:focus{ outline:none; }
+  .status-visited select.status-select{ color:var(--visited-ink); font-weight:600; }
+  .status-closed select.status-select{ color:var(--closed-ink); font-weight:600; }
+  .status-notfound select.status-select{ color:var(--notfound-ink); font-weight:600; }
+  .status-licensemissing select.status-select{ color:var(--licensemissing-ink); font-weight:600; }
+  .status-periodincomplete select.status-select{ color:var(--periodincomplete-ink); font-weight:600; }
+  .status-none select.status-select{ color:var(--neutral-ink); }
+
+  .row-del{
+    text-align:center; width:40px;
+    position:sticky; left:0; z-index:2;
+    background:var(--surface);
+  }
+  .row-edit{
+    text-align:center; width:40px;
+    position:sticky; left:40px; z-index:2;
+    background:var(--surface);
+    box-shadow:2px 0 5px -2px rgba(0,0,0,.08);
+  }
+  thead .row-del{ z-index:4; background:#FBFAF7; }
+  thead .row-edit{ z-index:3; background:#FBFAF7; }
+  tbody tr.status-visited .row-del, tbody tr.status-visited .row-edit{ background:var(--visited-bg); }
+  tbody tr.status-closed .row-del, tbody tr.status-closed .row-edit{ background:var(--closed-bg); }
+  tbody tr.status-notfound .row-del, tbody tr.status-notfound .row-edit{ background:var(--notfound-bg); }
+  tbody tr.status-licensemissing .row-del, tbody tr.status-licensemissing .row-edit{ background:var(--licensemissing-bg); }
+  tbody tr.status-periodincomplete .row-del, tbody tr.status-periodincomplete .row-edit{ background:var(--periodincomplete-bg); }
+  .row-del button{
+    border:none; cursor:pointer; padding:0;
+    width:26px; height:26px; border-radius:50%;
+    display:inline-flex; align-items:center; justify-content:center;
+    background:var(--notfound-bg); color:var(--notfound-ink); font-size:14px; line-height:1;
+  }
+  .row-del button:hover, .row-del button:active{ background:var(--notfound-ink); color:#fff; }
+  .row-edit button{
+    border:none; cursor:pointer; padding:0;
+    width:26px; height:26px; border-radius:50%;
+    display:inline-flex; align-items:center; justify-content:center;
+    background:#EAF1EE; color:var(--accent); font-size:13px; line-height:1;
+  }
+  .row-edit button:hover{ background:#DCE9E4; }
+  .row-edit button.done{ background:var(--accent); color:#fff; }
+  .row-edit button.done:hover{ background:#345a4d; }
+
+  .cell-readonly{ color:var(--ink); cursor:default; }
+  .map-link{
+    display:inline-flex; align-items:center; justify-content:center;
+    font-size:12px; color:var(--accent); text-decoration:none; padding:6px 8px;
+    white-space:nowrap;
+  }
+  .map-link:hover{ text-decoration:underline; }
+
+  .photo-cell{ text-align:center; cursor:pointer; padding:5px; }
+  .photo-thumb{ width:32px; height:32px; object-fit:cover; border-radius:6px; border:1px solid var(--line); display:block; margin:0 auto; }
+  .photo-add{
+    display:inline-flex; align-items:center; justify-content:center;
+    font-size:11.5px; color:var(--accent); padding:5px 8px;
+    border:1px dashed #C9C7BF; border-radius:6px; white-space:nowrap;
+  }
+  .photo-add:hover{ background:#F6F5F1; }
+  .photo-thumb-loading{ display:inline-block; font-size:11px; color:var(--ink-soft); }
+
+  .add-row-btn{
+    display:block; width:100%; text-align:right; padding:9px 14px; border:none; background:none;
+    color:var(--ink-soft); font-size:13px; cursor:pointer; border-top:1px solid var(--line);
+  }
+  .add-row-btn:hover{ background:#F6F5F1; color:var(--ink); }
+
+  .empty-state{
+    text-align:center; padding:60px 20px; color:var(--ink-soft);
+  }
+  .empty-state h2{ font-size:16px; color:var(--ink); margin-bottom:6px; font-weight:600; }
+
+  .toast{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:#fff; padding:9px 16px; border-radius:6px; font-size:13.5px;
+    opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:50;
+  }
+  .toast.show{ opacity:1; }
+
+  .app-footer{
+    text-align:center; padding:18px 12px 24px;
+    font-size:12px; color:var(--ink-soft);
+  }
+
+  .lock-btn{
+    position:fixed; top:12px; left:12px; z-index:60;
+    width:36px; height:36px; border-radius:50%; border:1px solid var(--line);
+    background:var(--surface); font-size:16px; line-height:1; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 1px 4px rgba(0,0,0,.12);
+  }
+  .lock-btn.unlocked{ background:var(--accent); border-color:var(--accent); }
+
+  input[type="file"]{ display:none; }
+
+  .inline-panel{
+    margin:10px 18px 0; max-width:1100px;
+    background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:14px;
+  }
+  .inline-panel p{ margin:0 0 10px; font-size:13.5px; color:var(--ink-soft); line-height:1.5; }
+  .inline-panel p.title{ font-weight:600; color:var(--ink); font-size:14.5px; margin-bottom:8px; }
+  .inline-panel .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .inline-panel input[type="text"]{
+    flex:1 1 180px; padding:9px 11px; border:1px solid var(--line); border-radius:var(--radius);
+    font-size:14px; color:var(--ink); background:var(--bg); text-align:right;
+  }
+  .inline-panel input[type="text"]:focus{ outline:none; border-color:var(--accent); }
+  .inline-panel .actions{ display:flex; gap:8px; }
+  .btn.danger{ background:var(--notfound-ink); color:#fff; border-color:var(--notfound-ink); }
+
+  @media (max-width: 640px){
+    header{ padding:12px 12px 10px; padding-left:52px; }
+    main{ padding:10px 10px 60px; }
+    .stats{ font-size:12.5px; gap:6px 12px; }
+    table{ font-size:12.5px; }
+    thead th{ font-size:10.5px; padding:6px 7px; }
+    td .cell-pad{ padding:6px 7px; }
+    .loc-name{ font-size:14px; }
+  }
+</style>
+</head>
+<body>
+
+<button id="lockToggle" class="lock-btn" title="مقفل — اضغط لفتح القفل" aria-label="القفل">🔒</button>
+
+<header>
+  <div class="title-row">
+    <h1>المنشآت</h1>
+    <div class="btn-row">
+      <button class="btn" id="btnExportXlsx">تصدير Excel</button>
+      <button class="btn" id="btnExportData">تصدير البيانات</button>
+      <button class="btn" id="btnImportData">استيراد البيانات</button>
+      <button class="btn primary" id="btnAddLocation">+ إضافة موقع</button>
+    </div>
+  </div>
+  <div class="stats" id="statsRow"></div>
+  <div class="controls">
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="searchInput" placeholder="ابحث بالاسم، الرقم الموحد، الحي، أو الموقع…">
+    </div>
+    <select class="filter" id="statusFilter">
+      <option value="all">كل الحالات</option>
+      <option value="visited">تمت الزيارة</option>
+      <option value="closed">مغلق عند الزيارة</option>
+      <option value="notfound">غير موجود</option>
+      <option value="licenseMissing">لم تُبرز الرخصة</option>
+      <option value="periodIncomplete">لم تكتمل المدة</option>
+      <option value="none">لم تتم الزيارة</option>
+    </select>
+  </div>
+</header>
+
+<div class="inline-panel" id="inlinePanel" style="display:none"></div>
+
+<main id="main"></main>
+
+<footer class="app-footer">Developed by Saad_GH</footer>
+
+<input type="file" id="fileInput" accept="application/json">
+<input type="file" id="photoInput" accept="image/*">
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  const SUPABASE_URL = "https://ilrhebrrusmakuonmjkz.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_5fJzF9JIb2brX-T0zyMhaA_Nyark4Mh";
+  const PHOTO_BUCKET = "establishment-photos";
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  const STATUS = {
+    none:            { label: "لم تتم الزيارة",   cls: "status-none",            dot: "neutral" },
+    visited:         { label: "تمت الزيارة",      cls: "status-visited",         dot: "visited" },
+    closed:          { label: "مغلق عند الزيارة", cls: "status-closed",          dot: "closed" },
+    notfound:        { label: "غير موجود",        cls: "status-notfound",        dot: "notfound" },
+    licenseMissing:  { label: "لم تُبرز الرخصة",   cls: "status-licensemissing",  dot: "licensemissing" },
+    periodIncomplete:{ label: "لم تكتمل المدة",    cls: "status-periodincomplete",dot: "periodincomplete" },
+  };
+
+  let state = { locations: [] };
+  let search = "";
+  let statusFilter = "all";
+  const editingRows = new Set(); // establishment ids currently in edit mode (UI-only, not persisted)
+  let isLocked = true; // view-only by default every time the page loads; unlocked only for this session
+
+  function requireUnlocked(){
+    if(isLocked){
+      toast("وضع العرض فقط — افتح القفل للتعديل");
+      return false;
+    }
+    return true;
+  }
+
+  // ---------- Supabase data access ----------
+  function mapEstFromDB(e){
+    return {
+      id: e.id, name: e.name || "", unified: e.unified || "", district: e.district || "",
+      street: e.street || "", location: e.location_url || "", status: e.status || "none",
+      visitDate: e.visit_date || "", hasPhoto: !!e.has_photo, photoPath: e.photo_path || ""
+    };
+  }
+
+  async function fetchAllData(){
+    const { data: locs, error: locErr } = await supabase.from("locations").select("*").order("created_at", { ascending:true });
+    if(locErr){ toast("تعذّر تحميل المواقع — تحقق من الاتصال"); return { locations: [] }; }
+    const { data: ests, error: estErr } = await supabase.from("establishments").select("*").order("created_at", { ascending:true });
+    if(estErr){ toast("تعذّر تحميل المنشآت"); }
+    const locations = (locs || []).map(l=>({
+      id: l.id, name: l.name, district: l.district || "", collapsed: !!l.collapsed,
+      establishments: (ests || []).filter(e=>e.location_id===l.id).map(mapEstFromDB)
+    }));
+    return { locations };
+  }
+
+  function getPhotoUrl(photoPath){
+    if(!photoPath) return "";
+    const { data } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(photoPath);
+    return data ? data.publicUrl : "";
+  }
+
+  async function urlToDataUrl(url){
+    const resp = await fetch(url);
+    const blob = await resp.blob();
+    return new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onload = ()=> resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function uid(){
+    return Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+  }
+
+  function toast(msg){
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toast._h);
+    toast._h = setTimeout(()=> t.classList.remove("show"), 1800);
+  }
+
+  // ---------- Inline panel (replaces prompt()/confirm() and fixed-overlay modals, neither of
+  // which render reliably inside restricted in-app browsers / file previewers) ----------
+  function hideInlinePanel(){
+    const panel = document.getElementById("inlinePanel");
+    panel.style.display = "none";
+    panel.innerHTML = "";
+  }
+  function showInlinePanel(html){
+    const panel = document.getElementById("inlinePanel");
+    panel.innerHTML = html;
+    panel.style.display = "block";
+    panel.scrollIntoView({ block: "nearest" });
+  }
+  function showPromptModal({ title, placeholder="", value="", confirmLabel="حفظ", type="text", inputmode="" }, onConfirm){
+    showInlinePanel(`
+      <p class="title">${escapeHtml(title)}</p>
+      <div class="row">
+        <input type="${type}" ${inputmode ? `inputmode="${inputmode}"` : ""} id="inlineInput" placeholder="${escapeHtml(placeholder)}" value="${escapeHtml(value)}">
+        <div class="actions">
+          <button class="btn" id="inlineCancel">إلغاء</button>
+          <button class="btn primary" id="inlineOk">${escapeHtml(confirmLabel)}</button>
+        </div>
+      </div>
+    `);
+    const input = document.getElementById("inlineInput");
+    input.focus();
+    input.select();
+    const submit = ()=>{ const v = input.value.trim(); hideInlinePanel(); if(v) onConfirm(v); };
+    document.getElementById("inlineOk").addEventListener("click", submit);
+    document.getElementById("inlineCancel").addEventListener("click", hideInlinePanel);
+    input.addEventListener("keydown", (e)=>{
+      if(e.key === "Enter"){ e.preventDefault(); submit(); }
+      if(e.key === "Escape"){ hideInlinePanel(); }
+    });
+  }
+  function showLocationPromptModal({ title, name="", district="", confirmLabel="حفظ" }, onConfirm){
+    showInlinePanel(`
+      <p class="title">${escapeHtml(title)}</p>
+      <input type="text" id="inlineLocName" placeholder="اسم الموقع / المجمع" value="${escapeHtml(name)}" style="width:100%;margin-bottom:8px;">
+      <input type="text" id="inlineLocDistrict" placeholder="الحي" value="${escapeHtml(district)}" style="width:100%;margin-bottom:12px;">
+      <div class="actions">
+        <button class="btn" id="inlineCancel">إلغاء</button>
+        <button class="btn primary" id="inlineOk">${escapeHtml(confirmLabel)}</button>
+      </div>
+    `);
+    const nameInput = document.getElementById("inlineLocName");
+    const districtInput = document.getElementById("inlineLocDistrict");
+    nameInput.focus();
+    nameInput.select();
+    const submit = ()=>{
+      const n = nameInput.value.trim();
+      const d = districtInput.value.trim();
+      hideInlinePanel();
+      if(n) onConfirm({ name:n, district:d });
+    };
+    document.getElementById("inlineOk").addEventListener("click", submit);
+    document.getElementById("inlineCancel").addEventListener("click", hideInlinePanel);
+    [nameInput, districtInput].forEach(inp=>{
+      inp.addEventListener("keydown", (e)=>{
+        if(e.key === "Enter"){ e.preventDefault(); submit(); }
+        if(e.key === "Escape"){ hideInlinePanel(); }
+      });
+    });
+  }
+  function showConfirmModal({ title, message, confirmLabel="تأكيد", danger=false }, onConfirm){
+    showInlinePanel(`
+      <p class="title">${escapeHtml(title)}</p>
+      <p>${escapeHtml(message)}</p>
+      <div class="actions">
+        <button class="btn" id="inlineCancel">إلغاء</button>
+        <button class="btn ${danger ? "danger" : "primary"}" id="inlineOk">${escapeHtml(confirmLabel)}</button>
+      </div>
+    `);
+    document.getElementById("inlineOk").addEventListener("click", ()=>{ hideInlinePanel(); onConfirm(); });
+    document.getElementById("inlineCancel").addEventListener("click", hideInlinePanel);
+  }
+
+  // ---------- Mutations (each writes to Supabase, then updates local state + re-renders) ----------
+  async function addLocation(name, district){
+    if(!requireUnlocked()) return;
+    const { data, error } = await supabase.from("locations").insert({ name, district: district || "" }).select().single();
+    if(error){ toast("تعذّر إضافة الموقع"); return; }
+    state.locations.push({ id: data.id, name: data.name, district: data.district || "", collapsed:false, establishments: [] });
+    render();
+  }
+
+  function deleteLocation(locId){
+    if(!requireUnlocked()) return;
+    const loc = state.locations.find(l=>l.id===locId);
+    if(!loc) return;
+    showConfirmModal({
+      title: "حذف الموقع",
+      message: `حذف "${loc.name}" وجميع المنشآت فيه (${loc.establishments.length})؟ لا يمكن التراجع عن هذا.`,
+      confirmLabel: "حذف",
+      danger: true
+    }, async ()=>{
+      const photoPaths = loc.establishments.filter(e=>e.hasPhoto && e.photoPath).map(e=>e.photoPath);
+      if(photoPaths.length){
+        try{ await supabase.storage.from(PHOTO_BUCKET).remove(photoPaths); }catch(err){}
+      }
+      const { error } = await supabase.from("locations").delete().eq("id", locId);
+      if(error){ toast("تعذّر حذف الموقع"); return; }
+      state.locations = state.locations.filter(l=>l.id!==locId);
+      render();
+    });
+  }
+
+  async function renameLocation(locId, name, district){
+    if(!requireUnlocked()) return;
+    const loc = state.locations.find(l=>l.id===locId);
+    if(!loc || !name.trim()) return;
+    const { error } = await supabase.from("locations").update({ name: name.trim(), district: (district || "").trim() }).eq("id", locId);
+    if(error){ toast("تعذّر حفظ التعديل"); return; }
+    loc.name = name.trim();
+    loc.district = (district || "").trim();
+    render();
+  }
+
+  function toggleCollapse(locId){
+    // View-only preference — kept local, not synced to the database.
+    const loc = state.locations.find(l=>l.id===locId);
+    if(loc) loc.collapsed = !loc.collapsed;
+    render();
+  }
+
+  async function addEstablishment(locId){
+    if(!requireUnlocked()) return;
+    const loc = state.locations.find(l=>l.id===locId);
+    if(!loc) return;
+    const { data, error } = await supabase.from("establishments").insert({
+      location_id: locId, name:"", unified:"", district: loc.district || "", street: loc.name,
+      location_url:"", status:"none"
+    }).select().single();
+    if(error){ toast("تعذّر إضافة المنشأة"); return; }
+    const newEst = mapEstFromDB(data);
+    loc.establishments.push(newEst);
+    editingRows.add(newEst.id);
+    render();
+  }
+
+  function toggleRowEdit(locId, estId){
+    if(!requireUnlocked()) return;
+    if(editingRows.has(estId)){
+      // Leaving edit mode: flush current field values in case the field is still
+      // focused and its blur handler hasn't fired yet.
+      const row = document.querySelector(`tr[data-est="${estId}"]`);
+      if(row){
+        row.querySelectorAll("[contenteditable][data-field]").forEach(el=>{
+          updateField(locId, estId, el.dataset.field, el.textContent.trim());
+        });
+      }
+      editingRows.delete(estId);
+    } else {
+      editingRows.add(estId);
+    }
+    render();
+  }
+
+  function deleteEstablishment(locId, estId){
+    if(!requireUnlocked()) return;
+    const loc = state.locations.find(l=>l.id===locId);
+    if(!loc) return;
+    const est = loc.establishments.find(e=>e.id===estId);
+    if(!est) return;
+    const name = est.name && est.name.trim() ? est.name.trim() : "هذه المنشأة";
+    showConfirmModal({
+      title: "حذف المنشأة",
+      message: `حذف "${name}"؟ لا يمكن التراجع عن هذا.`,
+      confirmLabel: "حذف",
+      danger: true
+    }, async ()=>{
+      if(est.hasPhoto && est.photoPath){
+        try{ await supabase.storage.from(PHOTO_BUCKET).remove([est.photoPath]); }catch(err){}
+      }
+      const { error } = await supabase.from("establishments").delete().eq("id", estId);
+      if(error){ toast("تعذّر حذف المنشأة"); return; }
+      editingRows.delete(estId);
+      loc.establishments = loc.establishments.filter(e=>e.id!==estId);
+      render();
+    });
+  }
+
+  // ---------- License photo ----------
+  let pendingPhotoTarget = null;
+
+  function compressImage(file, maxDim=900, quality=0.6){
+    return new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onload = (ev)=>{
+        const img = new Image();
+        img.onload = ()=>{
+          let { width, height } = img;
+          if(width > height && width > maxDim){ height = Math.round(height * (maxDim/width)); width = maxDim; }
+          else if(height > maxDim){ width = Math.round(width * (maxDim/height)); height = maxDim; }
+          const canvas = document.createElement("canvas");
+          canvas.width = width; canvas.height = height;
+          canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", quality));
+        };
+        img.onerror = ()=> reject(new Error("bad image"));
+        img.src = ev.target.result;
+      };
+      reader.onerror = ()=> reject(new Error("read failed"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function openPhotoPicker(locId, estId){
+    if(!requireUnlocked()) return;
+    pendingPhotoTarget = { locId, estId };
+    document.getElementById("photoInput").click();
+  }
+
+  async function setPhoto(locId, estId, dataUrl){
+    if(!requireUnlocked()) return;
+    const loc = state.locations.find(l=>l.id===locId);
+    if(!loc) return;
+    const est = loc.establishments.find(e=>e.id===estId);
+    if(!est) return;
+    try{
+      const blob = await (await fetch(dataUrl)).blob();
+      const path = `${estId}.jpg`;
+      const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, blob, { upsert:true, contentType:"image/jpeg" });
+      if(upErr) throw upErr;
+      const { error: dbErr } = await supabase.from("establishments").update({ has_photo:true, photo_path:path }).eq("id", estId);
+      if(dbErr) throw dbErr;
+      est.hasPhoto = true;
+      est.photoPath = path;
+      render();
+    }catch(err){
+      toast("تعذّر حفظ الصورة");
+    }
+  }
+
+  async function deletePhoto(locId, estId){
+    if(!requireUnlocked()) return;
+    const loc = state.locations.find(l=>l.id===locId);
+    if(!loc) return;
+    const est = loc.establishments.find(e=>e.id===estId);
+    if(!est) return;
+    try{
+      if(est.photoPath) await supabase.storage.from(PHOTO_BUCKET).remove([est.photoPath]);
+      await supabase.from("establishments").update({ has_photo:false, photo_path:null }).eq("id", estId);
+    }catch(err){}
+    est.hasPhoto = false;
+    est.photoPath = "";
+    render();
+  }
+
+  function viewPhoto(locId, estId){
+    const loc = state.locations.find(l=>l.id===locId);
+    if(!loc) return;
+    const est = loc.establishments.find(e=>e.id===estId);
+    if(!est || !est.hasPhoto) return;
+    const url = getPhotoUrl(est.photoPath);
+    if(!url) return;
+    const label = est.name && est.name.trim() ? est.name.trim() : "منشأة بدون اسم";
+    showInlinePanel(`
+      <p class="title">صورة الرخصة — ${escapeHtml(label)}</p>
+      <div style="text-align:center;margin-bottom:12px;">
+        <img src="${url}" alt="" id="photoPreviewImg" style="max-width:100%;max-height:320px;border-radius:8px;border:1px solid var(--line);cursor:zoom-in;">
+      </div>
+      <div class="actions">
+        <button class="btn" id="inlineClosePhoto">إغلاق</button>
+        <button class="btn" id="inlineEnlargePhoto">تكبير</button>
+        <button class="btn" id="inlineSavePhoto">تنزيل</button>
+        ${!isLocked ? `<button class="btn" id="inlineReplacePhoto">استبدال</button>` : ""}
+        ${!isLocked ? `<button class="btn danger" id="inlineDeletePhoto">حذف الصورة</button>` : ""}
+      </div>
+    `);
+    document.getElementById("inlineClosePhoto").addEventListener("click", hideInlinePanel);
+    if(!isLocked){
+      document.getElementById("inlineReplacePhoto").addEventListener("click", ()=>{ hideInlinePanel(); openPhotoPicker(locId, estId); });
+      document.getElementById("inlineDeletePhoto").addEventListener("click", ()=>{ hideInlinePanel(); deletePhoto(locId, estId); });
+    }
+    document.getElementById("inlineSavePhoto").addEventListener("click", ()=>{ downloadPhoto(url, label); });
+    const openFull = ()=> openFullscreenPhoto(url);
+    document.getElementById("inlineEnlargePhoto").addEventListener("click", openFull);
+    document.getElementById("photoPreviewImg").addEventListener("click", openFull);
+  }
+
+  async function downloadPhoto(url, name){
+    try{
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `${sanitizeFilename(name) || "صورة الرخصة"}.jpg`;
+      a.click();
+      URL.revokeObjectURL(blobUrl);
+    }catch(err){
+      toast("تعذّر تنزيل الصورة");
+    }
+  }
+
+  function openFullscreenPhoto(url){
+    const overlay = document.createElement("div");
+    overlay.id = "photoFullscreenOverlay";
+    overlay.style.cssText = "position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;padding:16px;";
+    overlay.innerHTML = `
+      <img src="${url}" alt="" style="max-width:100%;max-height:100%;object-fit:contain;">
+      <button id="closeFullscreenPhoto" aria-label="إغلاق" style="position:fixed;top:14px;left:14px;width:38px;height:38px;border:none;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;font-size:20px;line-height:1;cursor:pointer;">✕</button>
+    `;
+    document.body.appendChild(overlay);
+    const close = ()=>{ overlay.remove(); };
+    overlay.addEventListener("click", (e)=>{ if(e.target === overlay) close(); });
+    document.getElementById("closeFullscreenPhoto").addEventListener("click", close);
+  }
+
+  function updateField(locId, estId, field, value){
+    if(!requireUnlocked()) return;
+    const loc = state.locations.find(l=>l.id===locId);
+    if(!loc) return;
+    const est = loc.establishments.find(e=>e.id===estId);
+    if(!est) return;
+
+    est[field] = value;
+    const dbFieldMap = { name:"name", unified:"unified", district:"district", street:"street", location:"location_url", status:"status" };
+    const payload = {};
+    if(dbFieldMap[field]) payload[dbFieldMap[field]] = value;
+
+    if(field === "status"){
+      if(value === "none"){ est.visitDate = ""; }
+      else if(!est.visitDate){ est.visitDate = isoToday(); }
+      payload.visit_date = est.visitDate || null;
+    }
+    if(field === "visitDate"){
+      payload.visit_date = value || null;
+    }
+
+    supabase.from("establishments").update(payload).eq("id", estId).then(({ error })=>{
+      if(error) toast("تعذّر حفظ التعديل، تحقق من الاتصال");
+    });
+  }
+
+  function isoToday(){
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  }
+  function isoToDisplay(iso){
+    if(!iso) return "—";
+    const [y,m,d] = iso.split("-");
+    if(!y||!m||!d) return iso;
+    return `${d}/${m}/${y}`;
+  }
+
+  // ---------- Filtering ----------
+  function matchesFilters(est, locName){
+    if(statusFilter !== "all" && est.status !== statusFilter) return false;
+    if(!search) return true;
+    const q = search.toLowerCase();
+    return (
+      (est.name||"").toLowerCase().includes(q) ||
+      (est.unified||"").toLowerCase().includes(q) ||
+      (est.district||"").toLowerCase().includes(q) ||
+      (locName||"").toLowerCase().includes(q)
+    );
+  }
+
+  // ---------- Rendering ----------
+  function computeCounts(){
+    const counts = { total: 0 };
+    Object.keys(STATUS).forEach(k => counts[k] = 0);
+    state.locations.forEach(loc=>{
+      loc.establishments.forEach(e=>{
+        counts.total++;
+        const key = STATUS[e.status] ? e.status : "none";
+        counts[key]++;
+      });
+    });
+    return counts;
+  }
+
+  function renderStatsOnly(){
+    const c = computeCounts();
+    const statsOrder = [
+      { key:"visited",          dot:"visited",          label:"تمت الزيارة" },
+      { key:"closed",           dot:"closed",           label:"مغلق" },
+      { key:"notfound",         dot:"notfound",         label:"غير موجود" },
+      { key:"licenseMissing",   dot:"licensemissing",   label:"لم تُبرز الرخصة" },
+      { key:"periodIncomplete", dot:"periodincomplete", label:"لم تكتمل المدة" },
+      { key:"none",             dot:"neutral",          label:"لم تتم الزيارة" },
+    ];
+    const badges = statsOrder.map(s =>
+      `<span><span class="dot ${s.dot}"></span><b class="num">${c[s.key]}</b> ${s.label}</span>`
+    ).join("");
+    document.getElementById("statsRow").innerHTML = `<span><b class="num">${c.total}</b> الإجمالي</span>${badges}`;
+  }
+
+  function escapeHtml(s){
+    return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+
+  function render(){
+    renderStatsOnly();
+    const main = document.getElementById("main");
+
+    if(state.locations.length === 0){
+      main.innerHTML = `
+        <div class="empty-state">
+          <h2>لا توجد مواقع بعد</h2>
+          <div>أضف أول موقع لديك — مجمع أو شارع — ثم ابدأ بإضافة المنشآت داخله.</div>
+        </div>`;
+      return;
+    }
+
+    let html = "";
+    state.locations.forEach(loc=>{
+      const filtered = loc.establishments.filter(e => matchesFilters(e, loc.name));
+      const isFiltering = search || statusFilter !== "all";
+      if(isFiltering && filtered.length === 0) return;
+
+      html += `<div class="location ${loc.collapsed ? "collapsed":""}" data-loc="${loc.id}">
+        <div class="location-head" data-toggle="${loc.id}">
+          <div class="location-left">
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+            <span class="loc-name">${escapeHtml(loc.name)}${loc.district ? ` <span class="loc-district">(${escapeHtml(loc.district)})</span>` : ""}</span>
+            <span class="loc-count">— ${loc.establishments.length} منشأة</span>
+          </div>
+          <div class="loc-actions">
+            ${!isLocked ? `<button class="icon-btn" data-editloc="${loc.id}" title="تعديل الاسم">تعديل</button>` : ""}
+            ${!isLocked ? `<button class="icon-btn" data-delloc="${loc.id}" title="حذف الموقع">حذف</button>` : ""}
+          </div>
+        </div>
+        <div class="location-body">
+          <table>
+            <thead><tr>
+              <th style="width:18%">المنشأة</th>
+              <th class="num" style="width:12%">الرقم الموحد</th>
+              <th style="width:11%">الحي</th>
+              <th style="width:13%">الشارع / المجمع</th>
+              <th style="width:12%">الموقع</th>
+              <th style="width:13%">الحالة</th>
+              <th style="width:12%">تاريخ الزيارة</th>
+              <th style="width:9%">صورة الرخصة</th>
+              <th class="row-edit">تعديل</th>
+              <th class="row-del">حذف</th>
+            </tr></thead>
+            <tbody>`;
+
+      (isFiltering ? filtered : loc.establishments).forEach(est=>{
+        const st = STATUS[est.status] || STATUS.none;
+        const editing = !isLocked && editingRows.has(est.id);
+        const fieldCell = (field, value, opts) => {
+          opts = opts || {};
+          const tdClass = opts.tdClass ? ` class="${opts.tdClass}"` : "";
+          const extraAttrs = opts.attrs || "";
+          return editing
+            ? `<td${tdClass}><span class="cell-pad${opts.tdClass ? " "+opts.tdClass : ""}" contenteditable="true" spellcheck="false" ${extraAttrs} data-field="${field}" data-loc="${loc.id}" data-est="${est.id}">${escapeHtml(value)}</span></td>`
+            : `<td${tdClass}><span class="cell-pad cell-readonly${opts.tdClass ? " "+opts.tdClass : ""}">${escapeHtml(value)}</span></td>`;
+        };
+        html += `<tr class="${st.cls}" data-est="${est.id}">
+          ${fieldCell("name", est.name)}
+          ${fieldCell("unified", est.unified, { tdClass:"num", attrs:'inputmode="numeric"' })}
+          ${fieldCell("district", est.district)}
+          ${fieldCell("street", est.street)}
+          ${editing
+            ? `<td><span class="cell-pad" contenteditable="true" spellcheck="false" inputmode="url" data-field="location" data-loc="${loc.id}" data-est="${est.id}">${escapeHtml(est.location || "")}</span></td>`
+            : `<td>${est.location ? `<a class="map-link" href="${escapeHtml(est.location)}" target="_blank" rel="noopener noreferrer">📍 فتح الموقع</a>` : `<span class="cell-pad cell-readonly">—</span>`}</td>`}
+          <td>
+            <select class="status-select" data-field="status" data-loc="${loc.id}" data-est="${est.id}" ${isLocked ? "disabled" : ""}>
+              ${Object.keys(STATUS).map(k=>`<option value="${k}" ${k===est.status?"selected":""}>${STATUS[k].label}</option>`).join("")}
+            </select>
+          </td>
+          <td>
+            <input type="date" data-field="visitDate" data-loc="${loc.id}" data-est="${est.id}"
+              value="${escapeHtml(est.visitDate)}" ${(isLocked || est.status==="none") ? "disabled" : ""}>
+          </td>
+          <td class="photo-cell" ${(isLocked && !est.hasPhoto) ? "" : `data-photocell="${loc.id}|${est.id}"`}>
+            ${est.hasPhoto
+              ? `<img class="photo-thumb" src="${getPhotoUrl(est.photoPath)}" alt="">`
+              : (isLocked ? `<span class="cell-readonly">—</span>` : `<span class="photo-add">+ صورة</span>`)}
+          </td>
+          <td class="row-edit">${!isLocked ? `<button data-editrow="${loc.id}|${est.id}" title="${editing ? "تم" : "تعديل"}" class="${editing ? "done" : ""}">${editing ? "✓" : "✎"}</button>` : ""}</td>
+          <td class="row-del">${!isLocked ? `<button data-delest="${loc.id}|${est.id}" title="حذف الصف">✕</button>` : ""}</td>
+        </tr>`;
+      });
+
+      html += `</tbody></table>
+          ${!isLocked ? `<button class="add-row-btn" data-addest="${loc.id}">+ إضافة منشأة</button>` : ""}
+        </div>
+      </div>`;
+    });
+
+    main.innerHTML = html || `<div class="empty-state"><h2>لا توجد نتائج</h2><div>جرّب كلمة بحث أو فلترة مختلفة.</div></div>`;
+  }
+
+  // ---------- Event delegation ----------
+  document.getElementById("main").addEventListener("click", (e)=>{
+    const toggle = e.target.closest("[data-toggle]");
+    const addEst = e.target.closest("[data-addest]");
+    const delLoc = e.target.closest("[data-delloc]");
+    const editLoc = e.target.closest("[data-editloc]");
+    const delEst = e.target.closest("[data-delest]");
+    const editRow = e.target.closest("[data-editrow]");
+    const photoCell = e.target.closest("[data-photocell]");
+
+    if(editRow){
+      e.stopPropagation();
+      const [locId, estId] = editRow.dataset.editrow.split("|");
+      toggleRowEdit(locId, estId);
+      return;
+    }
+
+    if(photoCell){
+      e.stopPropagation();
+      const [locId, estId] = photoCell.dataset.photocell.split("|");
+      const loc = state.locations.find(l=>l.id===locId);
+      const est = loc && loc.establishments.find(x=>x.id===estId);
+      if(est && est.hasPhoto) viewPhoto(locId, estId);
+      else openPhotoPicker(locId, estId);
+      return;
+    }
+    if(editLoc){
+      e.stopPropagation();
+      const loc = state.locations.find(l=>l.id===editLoc.dataset.editloc);
+      if(!loc) return;
+      showLocationPromptModal({ title:"تعديل الموقع", name:loc.name, district:loc.district || "", confirmLabel:"حفظ" }, ({name, district})=>{
+        renameLocation(loc.id, name, district);
+      });
+      return;
+    }
+    if(delEst){ e.stopPropagation(); const [locId, estId] = delEst.dataset.delest.split("|"); deleteEstablishment(locId, estId); return; }
+    if(addEst){ e.stopPropagation(); addEstablishment(addEst.dataset.addest); return; }
+    if(delLoc){ e.stopPropagation(); deleteLocation(delLoc.dataset.delloc); return; }
+    if(toggle && !e.target.closest("[contenteditable]")){ toggleCollapse(toggle.dataset.toggle); return; }
+  });
+
+  document.getElementById("photoInput").addEventListener("change", async (e)=>{
+    const file = e.target.files[0];
+    e.target.value = "";
+    if(!file || !pendingPhotoTarget) return;
+    const { locId, estId } = pendingPhotoTarget;
+    pendingPhotoTarget = null;
+    try{
+      const dataUrl = await compressImage(file);
+      setPhoto(locId, estId, dataUrl);
+    }catch(err){
+      toast("تعذّر تحميل الصورة — جرّب صورة أخرى");
+    }
+  });
+
+  document.getElementById("main").addEventListener("change", (e)=>{
+    const t = e.target;
+    if(t.matches("select[data-field]") || t.matches("input[data-field]")){
+      updateField(t.dataset.loc, t.dataset.est, t.dataset.field, t.value);
+      render();
+    }
+  });
+
+  document.getElementById("main").addEventListener("blur", (e)=>{
+    const t = e.target;
+    if(t.matches("[contenteditable][data-field]")){
+      updateField(t.dataset.loc, t.dataset.est, t.dataset.field, t.textContent.trim());
+    }
+  }, true);
+
+  document.getElementById("main").addEventListener("keydown", (e)=>{
+    if(e.key === "Enter" && e.target.matches("[contenteditable]")){
+      e.preventDefault();
+      e.target.blur();
+    }
+  });
+
+  // Force plain-text paste inside editable cells/location names — strips any
+  // font, size, or color carried over from the copied source.
+  document.getElementById("main").addEventListener("paste", (e)=>{
+    if(!e.target.matches("[contenteditable]")) return;
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData("text/plain");
+    const selection = window.getSelection();
+    if(!selection.rangeCount) return;
+    selection.deleteFromDocument();
+    selection.getRangeAt(0).insertNode(document.createTextNode(text));
+    selection.collapseToEnd();
+  });
+
+  // ---------- Header controls ----------
+  document.getElementById("searchInput").addEventListener("input", (e)=>{
+    search = e.target.value; render();
+  });
+  document.getElementById("statusFilter").addEventListener("change", (e)=>{
+    statusFilter = e.target.value; render();
+  });
+  document.getElementById("btnAddLocation").addEventListener("click", ()=>{
+    if(!requireUnlocked()) return;
+    showLocationPromptModal({ title: "إضافة موقع", confirmLabel: "إضافة" }, ({name, district})=>{
+      addLocation(name, district);
+    });
+  });
+
+  document.getElementById("btnExportData").addEventListener("click", async ()=>{
+    toast("جاري تجهيز النسخة الاحتياطية...");
+    const photos = {};
+    for(const loc of state.locations){
+      for(const est of loc.establishments){
+        if(est.hasPhoto && est.photoPath){
+          try{ photos[est.id] = await urlToDataUrl(getPhotoUrl(est.photoPath)); }catch(err){}
+        }
+      }
+    }
+    const exportObj = { locations: state.locations, photos };
+    const blob = new Blob([JSON.stringify(exportObj, null, 2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const d = new Date().toISOString().slice(0,10);
+    a.href = url; a.download = `نسخة_احتياطية_المنشآت_${d}.json`;
+    a.click(); URL.revokeObjectURL(url);
+    toast("تم حفظ النسخة الاحتياطية");
+  });
+
+  document.getElementById("btnImportData").addEventListener("click", ()=>{
+    if(!requireUnlocked()) return;
+    document.getElementById("fileInput").click();
+  });
+  document.getElementById("fileInput").addEventListener("change", (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      try{
+        const data = JSON.parse(ev.target.result);
+        if(!data || !Array.isArray(data.locations)) throw new Error("bad shape");
+        const doImport = async ()=>{
+          toast("جاري الاستيراد... قد يستغرق دقيقة");
+          try{
+            for(const loc of data.locations){
+              const { data: locRow, error: locErr } = await supabase.from("locations")
+                .insert({ name: loc.name, district: loc.district || "", collapsed: !!loc.collapsed })
+                .select().single();
+              if(locErr) throw locErr;
+              for(const est of (loc.establishments || [])){
+                const { data: estRow, error: estErr } = await supabase.from("establishments").insert({
+                  location_id: locRow.id,
+                  name: est.name || "", unified: est.unified || "", district: est.district || "",
+                  street: est.street || "", location_url: est.location || "",
+                  status: est.status || "none", visit_date: est.visitDate || null,
+                  has_photo:false
+                }).select().single();
+                if(estErr) throw estErr;
+                const oldPhoto = data.photos && data.photos[est.id];
+                if(oldPhoto){
+                  try{
+                    const blob = await (await fetch(oldPhoto)).blob();
+                    const path = `${estRow.id}.jpg`;
+                    const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, blob, { upsert:true, contentType:"image/jpeg" });
+                    if(!upErr){
+                      await supabase.from("establishments").update({ has_photo:true, photo_path:path }).eq("id", estRow.id);
+                    }
+                  }catch(photoErr){}
+                }
+              }
+            }
+            state = await fetchAllData();
+            render();
+            toast("تم الاستيراد بنجاح");
+          }catch(err){
+            toast("حدث خطأ أثناء الاستيراد");
+            state = await fetchAllData();
+            render();
+          }
+        };
+        showConfirmModal({ title:"استيراد البيانات", message:"سيتم إضافة كل المواقع والمنشآت من هذا الملف إلى القاعدة الحالية. تأكد إنك ما استوردت هذا الملف من قبل لتفادي التكرار.", confirmLabel:"استيراد", danger:true }, doImport);
+      }catch(err){
+        showConfirmModal({ title:"تعذّر الاستيراد", message:"تعذّرت قراءة هذا الملف — تأكد من أنه نسخة احتياطية مُصدَّرة من هذه اللوحة.", confirmLabel:"حسنًا" }, ()=>{});
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  });
+
+  function sanitizeFilename(name){
+    return String(name || "").replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, " ").trim();
+  }
+
+  document.getElementById("btnExportXlsx").addEventListener("click", async ()=>{
+    if(!window.ExcelJS){ toast("تعذّر تحميل مكتبة التصدير"); return; }
+    toast("جاري تجهيز ملف الإكسل...");
+
+    const headers = ["المنشأة","الرقم الموحد","الحي","الشارع / المجمع","الموقع","الحالة","تاريخ الزيارة","صورة الرخصة"];
+    const COLS = headers.length;
+    const PHOTO_COL_INDEX = COLS - 1; // 0-based column for images
+    const LOCATION_COL_NUM = headers.indexOf("الموقع") + 1; // 1-based column number for hyperlink cells
+    const c = computeCounts();
+
+    const PAGE_BG  = "FFFAFAF8";
+    const SURFACE  = "FFFFFFFF";
+    const INK      = "FF1C1C1A";
+    const INK_SOFT = "FF6B6B65";
+    const LINE     = "FFE4E2DC";
+    const THEAD_BG = "FFFBFAF7";
+    const thin = { style:"thin", color:{ argb: LINE } };
+    const allBorders = { top:thin, bottom:thin, left:thin, right:thin };
+    const statusFillMap = { visited:"FFE8F5E9", closed:"FFFFF3E0", notfound:"FFFDECEA", licenseMissing:"FFF3E5F5", periodIncomplete:"FFE3F2FD", none: SURFACE };
+    const statusFontMap = { visited:"FF2E7D32", closed:"FFB85C00", notfound:"FFC62828", licenseMissing:"FF7B1FA2", periodIncomplete:"FF1565C0", none: INK };
+
+    function fillRow(row, argb){
+      row.eachCell({ includeEmpty:true }, cell=>{ cell.fill = { type:"pattern", pattern:"solid", fgColor:{ argb } }; });
+    }
+    function padded(first){
+      const arr = new Array(COLS).fill("");
+      arr[0] = first;
+      return arr;
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("المنشآت", { views: [{ rightToLeft:true }] });
+
+    const colWidths = new Array(COLS).fill(10);
+    function trackWidths(values){
+      values.forEach((v, i)=>{
+        const len = (v === undefined || v === null ? 0 : String(v).length) + 2;
+        if(len > colWidths[i]) colWidths[i] = Math.min(len, 45);
+      });
+    }
+
+    // Title
+    const titleRow = worksheet.addRow(padded("المنشآت"));
+    worksheet.mergeCells(titleRow.number, 1, titleRow.number, COLS);
+    fillRow(titleRow, PAGE_BG);
+    titleRow.getCell(1).font = { bold:true, size:16, color:{ argb:INK } };
+    titleRow.getCell(1).alignment = { horizontal:"right", vertical:"middle" };
+    titleRow.height = 26;
+
+    // Stats
+    const statsText = `${c.total} الإجمالي    |    ${c.visited} تمت الزيارة    |    ${c.closed} مغلق    |    ${c.notfound} غير موجود    |    ${c.licenseMissing} لم تُبرز الرخصة    |    ${c.periodIncomplete} لم تكتمل المدة    |    ${c.none} لم تتم الزيارة`;
+    const statsRow = worksheet.addRow(padded(statsText));
+    worksheet.mergeCells(statsRow.number, 1, statsRow.number, COLS);
+    fillRow(statsRow, PAGE_BG);
+    statsRow.getCell(1).font = { size:11, color:{ argb:INK_SOFT } };
+    statsRow.getCell(1).alignment = { horizontal:"right", vertical:"middle" };
+    statsRow.height = 20;
+
+    // Spacer
+    const spacer1 = worksheet.addRow(padded(""));
+    fillRow(spacer1, PAGE_BG);
+    spacer1.height = 6;
+
+    const photoJobs = []; // { rowNumber, dataUrl, name }
+
+    for(const loc of state.locations){
+      const locHeaderRow = worksheet.addRow(padded(`${loc.name} — ${loc.establishments.length} منشأة`));
+      worksheet.mergeCells(locHeaderRow.number, 1, locHeaderRow.number, COLS);
+      fillRow(locHeaderRow, SURFACE);
+      locHeaderRow.eachCell({ includeEmpty:true }, cell=>{ cell.border = { top:thin, bottom:thin }; });
+      locHeaderRow.getCell(1).font = { bold:true, size:12.5, color:{ argb:INK } };
+      locHeaderRow.getCell(1).alignment = { horizontal:"right", vertical:"middle" };
+
+      const tableHeaderRow = worksheet.addRow(headers);
+      trackWidths(headers);
+      tableHeaderRow.eachCell({ includeEmpty:true }, cell=>{
+        cell.fill = { type:"pattern", pattern:"solid", fgColor:{ argb:THEAD_BG } };
+        cell.font = { bold:true, size:10.5, color:{ argb:INK_SOFT } };
+        cell.alignment = { horizontal:"right", vertical:"middle" };
+        cell.border = allBorders;
+      });
+
+      for(const est of loc.establishments){
+        const rowValues = [
+          est.name, est.unified, est.district, est.street, "",
+          STATUS[est.status] ? STATUS[est.status].label : est.status,
+          est.visitDate ? isoToDisplay(est.visitDate) : "—",
+          ""
+        ];
+        trackWidths(rowValues);
+        const dataRow = worksheet.addRow(rowValues);
+        const key = est.status || "none";
+        dataRow.eachCell({ includeEmpty:true }, cell=>{
+          cell.fill = { type:"pattern", pattern:"solid", fgColor:{ argb: statusFillMap[key] } };
+          cell.font = { size:11, color:{ argb: statusFontMap[key] }, bold: key !== "none" };
+          cell.alignment = { horizontal:"right", vertical:"middle" };
+          cell.border = allBorders;
+        });
+
+        if(est.location){
+          const linkCell = dataRow.getCell(LOCATION_COL_NUM);
+          linkCell.value = { text:"اضغط هنا للموقع", hyperlink: est.location };
+          linkCell.font = { size:11, color:{ argb:"FF1565C0" }, underline:true };
+        }
+
+        if(est.hasPhoto && est.photoPath){
+          try{
+            const dataUrl = await urlToDataUrl(getPhotoUrl(est.photoPath));
+            photoJobs.push({ rowNumber: dataRow.number, dataUrl, name: est.name && est.name.trim() ? est.name.trim() : `منشأة ${photoJobs.length+1}` });
+            dataRow.height = 34;
+          }catch(err){}
+        }
+      }
+
+      const spacer = worksheet.addRow(padded(""));
+      fillRow(spacer, PAGE_BG);
+      spacer.height = 6;
+    }
+
+    colWidths.forEach((w, i)=>{ worksheet.getColumn(i+1).width = w; });
+
+    // Embed each license photo, anchored over its row's photo column.
+    photoJobs.forEach(job=>{
+      try{
+        const imageId = workbook.addImage({ base64: job.dataUrl, extension:"jpeg" });
+        worksheet.addImage(imageId, {
+          tl: { col: PHOTO_COL_INDEX + 0.15, row: (job.rowNumber - 1) + 0.1 },
+          ext: { width:32, height:32 },
+          editAs: "oneCell"
+        });
+      }catch(err){}
+    });
+
+    const d = new Date().toISOString().slice(0,10);
+    try{
+      const buffer = await workbook.xlsx.writeBuffer();
+
+      if(!window.JSZip){
+        toast("تعذّر تحميل أداة الضغط — تأكد من الاتصال بالإنترنت وحاول مجددًا");
+        const blob = new Blob([buffer], { type:"application/octet-stream" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = `المنشآت_${d}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      const zip = new JSZip();
+      zip.file(`المنشآت_${d}.xlsx`, buffer);
+      if(photoJobs.length){
+        const photosFolder = zip.folder("صور_الرخص");
+        const usedNames = {};
+        photoJobs.forEach(job=>{
+          let base = sanitizeFilename(job.name) || "منشأة";
+          let finalName = base;
+          let n = 2;
+          while(usedNames[finalName]){ finalName = `${base} (${n})`; n++; }
+          usedNames[finalName] = true;
+          const base64 = job.dataUrl.split(",")[1];
+          photosFolder.file(`${finalName}.jpg`, base64, { base64:true });
+        });
+      }
+      const zipBlob = await zip.generateAsync({ type:"blob" });
+      const zipUrl = URL.createObjectURL(zipBlob);
+      const za = document.createElement("a");
+      za.href = zipUrl; za.download = `المنشآت_${d}.zip`;
+      za.click();
+      URL.revokeObjectURL(zipUrl);
+    }catch(err){
+      toast("تعذّر إنشاء ملف الإكسل");
+    }
+  });
+
+  // ---------- Lock / view-only mode ----------
+  function updateLockUI(){
+    const lockBtn = document.getElementById("lockToggle");
+    const importBtn = document.getElementById("btnImportData");
+    if(lockBtn){
+      lockBtn.textContent = isLocked ? "🔒" : "🔓";
+      lockBtn.classList.toggle("unlocked", !isLocked);
+      lockBtn.title = isLocked ? "مقفل — اضغط لفتح القفل" : "مفتوح — اضغط للقفل";
+    }
+    if(importBtn) importBtn.disabled = isLocked;
+    render();
+  }
+
+  document.getElementById("lockToggle").addEventListener("click", ()=>{
+    if(isLocked){
+      showPromptModal({ title:"إدخال الرمز السري", placeholder:"الرمز السري", confirmLabel:"فتح", type:"password", inputmode:"numeric" }, (code)=>{
+        if(code === "1999"){
+          isLocked = false;
+          updateLockUI();
+          toast("تم فتح القفل — التعديل متاح الآن");
+        } else {
+          toast("رمز غير صحيح");
+        }
+      });
+    } else {
+      isLocked = true;
+      updateLockUI();
+      toast("تم القفل — وضع العرض فقط");
+    }
+  });
+
+  // ---------- Startup ----------
+  async function init(){
+    document.getElementById("main").innerHTML = `<div class="empty-state"><h2>جاري التحميل…</h2></div>`;
+    updateLockUI();
+    state = await fetchAllData();
+    render();
+  }
+  init();
+})();
+</script>
+</body>
+</html>
