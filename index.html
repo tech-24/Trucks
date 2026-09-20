@@ -28,7 +28,7 @@
   /* Prevent accidental text selection while scrolling/swiping on touch devices —
      re-enabled explicitly below for anything the person is actually meant to type into. */
   *{ -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
-  [contenteditable="true"], input, textarea, select, .map-link{
+  [contenteditable="true"], input, textarea, .map-link{
     -webkit-user-select:text; user-select:text; -webkit-touch-callout:default;
   }
   html,body{margin:0;padding:0;}
@@ -272,6 +272,17 @@
 </head>
 <body>
 
+<div id="accessGate" style="display:none;position:fixed;inset:0;z-index:300;background:var(--bg);align-items:center;justify-content:center;padding:20px;">
+  <div style="max-width:320px;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:24px;text-align:center;">
+    <h2 style="margin:0 0 6px;font-size:17px;color:var(--ink);">المنشآت</h2>
+    <p style="margin:0 0 16px;color:var(--ink-soft);font-size:13.5px;">أدخل كلمة المرور للوصول</p>
+    <input type="password" id="accessPasswordInput" autocomplete="off" placeholder="كلمة المرور"
+      style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;font-size:14px;margin-bottom:10px;text-align:center;box-sizing:border-box;">
+    <button id="accessSubmitBtn" class="btn primary" style="width:100%;">دخول</button>
+    <p id="accessError" style="color:var(--notfound-ink);font-size:12.5px;margin-top:10px;display:none;">كلمة المرور غير صحيحة</p>
+  </div>
+</div>
+
 <button id="lockToggle" class="lock-btn" title="مقفل — اضغط لفتح القفل" aria-label="القفل">🔒</button>
 
 <header>
@@ -279,8 +290,8 @@
     <h1>المنشآت</h1>
     <div class="btn-row">
       <button class="btn" id="btnExportXlsx">تصدير Excel</button>
-      <button class="btn" id="btnExportData">تصدير البيانات</button>
-      <button class="btn" id="btnImportData">استيراد البيانات</button>
+      <button class="btn" id="btnExportData">تصدير نسخة</button>
+      <button class="btn" id="btnImportData">استيراد نسخة</button>
       <button class="btn primary" id="btnAddLocation">+ إضافة موقع</button>
     </div>
   </div>
@@ -513,10 +524,13 @@
   }
 
   function toggleCollapse(locId){
-    // View-only preference — kept local, not synced to the database.
     const loc = state.locations.find(l=>l.id===locId);
-    if(loc) loc.collapsed = !loc.collapsed;
+    if(!loc) return;
+    loc.collapsed = !loc.collapsed;
     render();
+    supabase.from("locations").update({ collapsed: loc.collapsed }).eq("id", locId).then(({ error })=>{
+      if(error) toast("تعذّر حفظ حالة الطي");
+    });
   }
 
   async function addEstablishment(locId){
@@ -846,7 +860,7 @@
           const tdClass = opts.tdClass ? ` class="${opts.tdClass}"` : "";
           const extraAttrs = opts.attrs || "";
           return editing
-            ? `<td${tdClass}><input type="text" class="cell-input${opts.tdClass ? " "+opts.tdClass : ""}" ${extraAttrs} data-field="${field}" data-loc="${loc.id}" data-est="${est.id}" value="${escapeHtml(value)}"></td>`
+            ? `<td${tdClass}><input type="text" class="cell-input${opts.tdClass ? " "+opts.tdClass : ""}" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" ${extraAttrs} data-field="${field}" data-loc="${loc.id}" data-est="${est.id}" value="${escapeHtml(value)}"></td>`
             : `<td${tdClass}><span class="cell-pad cell-readonly${opts.tdClass ? " "+opts.tdClass : ""}">${escapeHtml(value)}</span></td>`;
         };
         html += `<tr class="${st.cls}" data-est="${est.id}">
@@ -855,7 +869,7 @@
           ${fieldCell("district", est.district)}
           ${fieldCell("street", est.street)}
           ${editing
-            ? `<td><input type="text" class="cell-input" inputmode="url" data-field="location" data-loc="${loc.id}" data-est="${est.id}" value="${escapeHtml(est.location || "")}"></td>`
+            ? `<td><input type="text" class="cell-input" inputmode="url" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-field="location" data-loc="${loc.id}" data-est="${est.id}" value="${escapeHtml(est.location || "")}"></td>`
             : `<td>${est.location ? `<a class="map-link" href="${escapeHtml(est.location)}" target="_blank" rel="noopener noreferrer">📍 فتح الموقع</a>` : `<span class="cell-pad cell-readonly">—</span>`}</td>`}
           <td>
             <select class="status-select" data-field="status" data-loc="${loc.id}" data-est="${est.id}" ${isLocked ? "disabled" : ""}>
@@ -994,6 +1008,7 @@
   });
 
   document.getElementById("btnExportData").addEventListener("click", async ()=>{
+    if(!requireUnlocked()) return;
     toast("جاري تجهيز النسخة الاحتياطية...");
     const photos = {};
     for(const loc of state.locations){
@@ -1090,7 +1105,7 @@
             window.removeEventListener("beforeunload", beforeUnloadHandler);
           }
         };
-        showConfirmModal({ title:"استيراد البيانات", message:"سيتم إضافة كل المواقع والمنشآت من هذا الملف إلى القاعدة الحالية. تأكد إنك ما استوردت هذا الملف من قبل لتفادي التكرار.", confirmLabel:"استيراد", danger:true }, doImport);
+        showConfirmModal({ title:"استيراد نسخة", message:"سيتم إضافة كل المواقع والمنشآت من هذا الملف إلى القاعدة الحالية. تأكد إنك ما استوردت هذا الملف من قبل لتفادي التكرار.", confirmLabel:"استيراد", danger:true }, doImport);
       }catch(err){
         showConfirmModal({ title:"تعذّر الاستيراد", message:"تعذّرت قراءة هذا الملف — تأكد من أنه نسخة احتياطية مُصدَّرة من هذه اللوحة.", confirmLabel:"حسنًا" }, ()=>{});
       }
@@ -1281,12 +1296,14 @@
   function updateLockUI(){
     const lockBtn = document.getElementById("lockToggle");
     const importBtn = document.getElementById("btnImportData");
+    const exportBtn = document.getElementById("btnExportData");
     if(lockBtn){
       lockBtn.textContent = isLocked ? "🔒" : "🔓";
       lockBtn.classList.toggle("unlocked", !isLocked);
       lockBtn.title = isLocked ? "مقفل — اضغط لفتح القفل" : "مفتوح — اضغط للقفل";
     }
     if(importBtn) importBtn.disabled = isLocked;
+    if(exportBtn) exportBtn.disabled = isLocked;
     render();
   }
 
@@ -1309,13 +1326,44 @@
   });
 
   // ---------- Startup ----------
+  const ACCESS_KEY = "establishments_access_ok_v1";
+  const ACCESS_CODE = "Aa112233";
+
   async function init(){
     document.getElementById("main").innerHTML = `<div class="empty-state"><h2>جاري التحميل…</h2></div>`;
     updateLockUI();
     state = await fetchAllData();
     render();
   }
-  init();
+
+  function showAccessGate(){
+    const gate = document.getElementById("accessGate");
+    const input = document.getElementById("accessPasswordInput");
+    const errorMsg = document.getElementById("accessError");
+    gate.style.display = "flex";
+    input.focus();
+    const submit = ()=>{
+      if(input.value === ACCESS_CODE){
+        try{ localStorage.setItem(ACCESS_KEY, "1"); }catch(err){}
+        gate.style.display = "none";
+        init();
+      } else {
+        errorMsg.style.display = "block";
+        input.value = "";
+        input.focus();
+      }
+    };
+    document.getElementById("accessSubmitBtn").addEventListener("click", submit);
+    input.addEventListener("keydown", (e)=>{ if(e.key === "Enter"){ e.preventDefault(); submit(); } });
+  }
+
+  let alreadyAuthed = false;
+  try{ alreadyAuthed = localStorage.getItem(ACCESS_KEY) === "1"; }catch(err){}
+  if(alreadyAuthed){
+    init();
+  } else {
+    showAccessGate();
+  }
 })();
 </script>
 </body>
