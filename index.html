@@ -1325,9 +1325,11 @@
     }
   });
 
-  // ---------- Startup ----------
-  const ACCESS_KEY = "establishments_access_ok_v1";
-  const ACCESS_CODE = "Aa112233";
+  // ---------- Startup / real Supabase authentication ----------
+  // The gate only ever shows a single password field. Behind the scenes that
+  // password is checked against one fixed Supabase Auth account, so access is
+  // enforced by the database itself (RLS), not just by this page's JS.
+  const ACCESS_EMAIL = "saad.alghamdy2014@gmail.com";
 
   async function init(){
     document.getElementById("main").innerHTML = `<div class="empty-state"><h2>جاري التحميل…</h2></div>`;
@@ -1340,30 +1342,35 @@
     const gate = document.getElementById("accessGate");
     const input = document.getElementById("accessPasswordInput");
     const errorMsg = document.getElementById("accessError");
+    const submitBtn = document.getElementById("accessSubmitBtn");
     gate.style.display = "flex";
     input.focus();
-    const submit = ()=>{
-      if(input.value === ACCESS_CODE){
-        try{ localStorage.setItem(ACCESS_KEY, "1"); }catch(err){}
-        gate.style.display = "none";
-        init();
-      } else {
+    const submit = async ()=>{
+      submitBtn.disabled = true;
+      errorMsg.style.display = "none";
+      const { error } = await supabase.auth.signInWithPassword({ email: ACCESS_EMAIL, password: input.value });
+      submitBtn.disabled = false;
+      if(error){
         errorMsg.style.display = "block";
         input.value = "";
         input.focus();
+        return;
       }
+      gate.style.display = "none";
+      init();
     };
-    document.getElementById("accessSubmitBtn").addEventListener("click", submit);
+    submitBtn.addEventListener("click", submit);
     input.addEventListener("keydown", (e)=>{ if(e.key === "Enter"){ e.preventDefault(); submit(); } });
   }
 
-  let alreadyAuthed = false;
-  try{ alreadyAuthed = localStorage.getItem(ACCESS_KEY) === "1"; }catch(err){}
-  if(alreadyAuthed){
-    init();
-  } else {
-    showAccessGate();
-  }
+  (async ()=>{
+    const { data } = await supabase.auth.getSession();
+    if(data && data.session){
+      init();
+    } else {
+      showAccessGate();
+    }
+  })();
 })();
 </script>
 </body>
