@@ -1007,42 +1007,68 @@
         const data = JSON.parse(ev.target.result);
         if(!data || !Array.isArray(data.locations)) throw new Error("bad shape");
         const doImport = async ()=>{
-          toast("جاري الاستيراد... قد يستغرق دقيقة");
+          const beforeUnloadHandler = (e)=>{ e.preventDefault(); e.returnValue = ""; };
+          window.addEventListener("beforeunload", beforeUnloadHandler);
+
+          function showProgress(msg){
+            showInlinePanel(`
+              <p class="title">جاري الاستيراد</p>
+              <p>${escapeHtml(msg)}</p>
+              <p style="color:var(--notfound-ink);font-weight:600;">لا تحدّث الصفحة أو تغلقها إلى أن تنتهي العملية.</p>
+            `);
+          }
+
           try{
+            const totalLocs = data.locations.length;
+            let locIndex = 0;
             for(const loc of data.locations){
+              locIndex++;
+              const ests = loc.establishments || [];
+              showProgress(`الموقع ${locIndex} من ${totalLocs} — "${loc.name}" (${ests.length} منشأة)`);
+
               const { data: locRow, error: locErr } = await supabase.from("locations")
                 .insert({ name: loc.name, district: loc.district || "", collapsed: !!loc.collapsed })
                 .select().single();
               if(locErr) throw locErr;
-              for(const est of (loc.establishments || [])){
-                const { data: estRow, error: estErr } = await supabase.from("establishments").insert({
-                  location_id: locRow.id,
-                  name: est.name || "", unified: est.unified || "", district: est.district || "",
-                  street: est.street || "", location_url: est.location || "",
-                  status: est.status || "none", visit_date: est.visitDate || null,
-                  has_photo:false
-                }).select().single();
-                if(estErr) throw estErr;
-                const oldPhoto = data.photos && data.photos[est.id];
-                if(oldPhoto){
-                  try{
-                    const blob = await (await fetch(oldPhoto)).blob();
-                    const path = `${estRow.id}.jpg`;
-                    const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, blob, { upsert:true, contentType:"image/jpeg" });
-                    if(!upErr){
-                      await supabase.from("establishments").update({ has_photo:true, photo_path:path }).eq("id", estRow.id);
-                    }
-                  }catch(photoErr){}
-                }
+
+              const CONCURRENCY = 4;
+              for(let i = 0; i < ests.length; i += CONCURRENCY){
+                const batch = ests.slice(i, i + CONCURRENCY);
+                await Promise.all(batch.map(async (est)=>{
+                  const { data: estRow, error: estErr } = await supabase.from("establishments").insert({
+                    location_id: locRow.id,
+                    name: est.name || "", unified: est.unified || "", district: est.district || "",
+                    street: est.street || "", location_url: est.location || "",
+                    status: est.status || "none", visit_date: est.visitDate || null,
+                    has_photo:false
+                  }).select().single();
+                  if(estErr) throw estErr;
+                  const oldPhoto = data.photos && data.photos[est.id];
+                  if(oldPhoto){
+                    try{
+                      const blob = await (await fetch(oldPhoto)).blob();
+                      const path = `${estRow.id}.jpg`;
+                      const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, blob, { upsert:true, contentType:"image/jpeg" });
+                      if(!upErr){
+                        await supabase.from("establishments").update({ has_photo:true, photo_path:path }).eq("id", estRow.id);
+                      }
+                    }catch(photoErr){}
+                  }
+                }));
+                showProgress(`الموقع ${locIndex} من ${totalLocs} — "${loc.name}" — ${Math.min(i+CONCURRENCY, ests.length)} من ${ests.length} منشأة`);
               }
             }
             state = await fetchAllData();
             render();
+            hideInlinePanel();
             toast("تم الاستيراد بنجاح");
           }catch(err){
+            hideInlinePanel();
             toast("حدث خطأ أثناء الاستيراد");
             state = await fetchAllData();
             render();
+          }finally{
+            window.removeEventListener("beforeunload", beforeUnloadHandler);
           }
         };
         showConfirmModal({ title:"استيراد البيانات", message:"سيتم إضافة كل المواقع والمنشآت من هذا الملف إلى القاعدة الحالية. تأكد إنك ما استوردت هذا الملف من قبل لتفادي التكرار.", confirmLabel:"استيراد", danger:true }, doImport);
